@@ -10,5 +10,12 @@
         "key": "krishna54",
         "expirydate": "19-11-2025",
         "Allowoffline": false
+    },
+    {
+        "device_id": "31a3a2c74f901064",
+        "key": "nur",
+        "expirydate": "19-11-2025",
+        "Allowoffline": false
     }
 ]
+
