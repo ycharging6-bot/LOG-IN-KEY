@@ -1,1 +1,188 @@
-https://t.me/+IzTAxg2qgH04OTU1
+<?php
+// ================= CONFIG =================
+$botToken = "8490857977:AAGYUC4SIIEJPzuhTGQZg6rhhODsYdBTp5c";
+$botName = "Rocky Bhai";
+$requiredGroup = "@ssH9B0iYkjVmODA1"; // Required group
+$openai_api_key = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; // Your OpenAI API Key
+
+$spam_file = 'spam_mode.json'; // file to store /dont_spam status
+$admin_dm_id = null;
+
+// Load /dont_spam status from file
+if(file_exists($spam_file)){
+    $spam_data = json_decode(file_get_contents($spam_file), true);
+    $dont_spam = $spam_data['dont_spam'] ?? false;
+}else{
+    $dont_spam = false;
+}
+
+// ================= HELPER FUNCTIONS =================
+function sendMessage($chat_id,$text,$keyboard=null){
+    global $botToken;
+    $url = "https://api.telegram.org/bot$botToken/sendMessage";
+    $data = ['chat_id'=>$chat_id,'text'=>$text,'parse_mode'=>'HTML'];
+    if($keyboard) $data['reply_markup']=json_encode($keyboard);
+    $ch = curl_init();curl_setopt($ch,CURLOPT_URL,$url);
+    curl_setopt($ch,CURLOPT_POST,true);curl_setopt($ch,CURLOPT_POSTFIELDS,$data);
+    curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);curl_exec($ch);curl_close($ch);
+}
+
+function answerCallback($callback_id){
+    global $botToken;
+    $url = "https://api.telegram.org/bot$botToken/answerCallbackQuery?callback_query_id=$callback_id";
+    $ch = curl_init();curl_setopt($ch,CURLOPT_URL,$url);
+    curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);curl_exec($ch);curl_close($ch);
+}
+
+function kickUser($chat_id,$user_id){ global $botToken;
+    $url="https://api.telegram.org/bot$botToken/kickChatMember";
+    $data=['chat_id'=>$chat_id,'user_id'=>$user_id];
+    $ch=curl_init();curl_setopt($ch,CURLOPT_URL,$url);curl_setopt($ch,CURLOPT_POST,true);
+    curl_setopt($ch,CURLOPT_POSTFIELDS,$data);curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+    curl_exec($ch);curl_close($ch);
+}
+
+function deleteMessage($chat_id,$message_id){ global $botToken;
+    $url="https://api.telegram.org/bot$botToken/deleteMessage";
+    $data=['chat_id'=>$chat_id,'message_id'=>$message_id];
+    $ch=curl_init();curl_setopt($ch,CURLOPT_URL,$url);curl_setopt($ch,CURLOPT_POST,true);
+    curl_setopt($ch,CURLOPT_POSTFIELDS,$data);curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+    $res=curl_exec($ch);curl_close($ch);return $res;
+}
+
+function getUserStatus($chat_id,$user_id){
+    global $botToken;
+    $url="https://api.telegram.org/bot$botToken/getChatMember?chat_id=$chat_id&user_id=$user_id";
+    $result=file_get_contents($url);
+    $data=json_decode($result,true);
+    return $data['result']['status']??'';
+}
+
+function checkRequiredGroup($user_id){
+    global $botToken,$requiredGroup;
+    $url="https://api.telegram.org/bot$botToken/getChatMember?chat_id=$requiredGroup&user_id=$user_id";
+    $result=file_get_contents($url);
+    $data=json_decode($result,true);
+    $status=$data['result']['status']??'left';
+    return ($status=='member'||$status=='administrator'||$status=='creator');
+}
+
+// ================= OPENAI GPT FUNCTION =================
+function askGPT($question){
+    global $openai_api_key;
+    $ch = curl_init("https://api.openai.com/v1/completions");
+    $data = [
+        "model"=>"text-davinci-003",
+        "prompt"=>$question,
+        "max_tokens"=>200,
+        "temperature"=>0.7
+    ];
+    curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+    curl_setopt($ch,CURLOPT_POST,true);
+    curl_setopt($ch,CURLOPT_HTTPHEADER,[
+        "Content-Type: application/json",
+        "Authorization: Bearer $openai_api_key"
+    ]);
+    curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
+    $response=curl_exec($ch);curl_close($ch);
+    $result=json_decode($response,true);
+    return $result['choices'][0]['text']??"Error getting response";
+}
+
+// ================= GET UPDATE =================
+$update=json_decode(file_get_contents('php://input'),true);
+
+// ================= MESSAGE HANDLING =================
+if(isset($update["message"])){
+    $chat_id=$update["message"]["chat"]["id"];
+    $from_id=$update["message"]["from"]["id"];
+    $from_name=$update["message"]["from"]["first_name"]??'';
+    $text=strtolower($update["message"]["text"]??'');
+    $message_id=$update["message"]["message_id"];
+    $user_status=getUserStatus($chat_id,$from_id);
+
+    // ===== PRE-GROUP JOIN CHECK =====
+    if(!checkRequiredGroup($from_id)){
+        $keyboard=[
+            'inline_keyboard'=>[[['text'=>'Join Required Group 🔗','url'=>'https://t.me/ssH9B0iYkjVmODA1/1917']]]
+        ];
+        sendMessage($chat_id,"⚠️ You must join the required group to use $botName.",$keyboard);
+        return;
+    }
+
+    // ===== WELCOME NEW MEMBER =====
+    if(isset($update["message"]["new_chat_member"])){
+        $new_name=$update["message"]["new_chat_member"]["first_name"];
+        sendMessage($chat_id,"👋 Welcome $new_name to $botName Group!");
+    }
+
+    // ===== ADMIN COMMANDS =====
+    if($user_status=='administrator'||$user_status=='creator'){
+        $admin_dm_id = $from_id;
+
+        // /dont_spam ON
+        if($text=="/dont_spam on"){
+            $dont_spam = true;
+            file_put_contents('spam_mode.json', json_encode(['dont_spam'=>$dont_spam]));
+            sendMessage($chat_id,"⚠️ Spam control activated!");
+            sendMessage($admin_dm_id,"✅ /dont_spam ON activated by $from_name");
+        }
+
+        // /dont_spam OFF
+        elseif($text=="/dont_spam off"){
+            $dont_spam = false;
+            file_put_contents('spam_mode.json', json_encode(['dont_spam'=>$dont_spam]));
+            sendMessage($chat_id,"✅ Spam control deactivated!");
+            sendMessage($admin_dm_id,"✅ /dont_spam OFF deactivated by $from_name");
+        }
+
+        // /kick reply
+        elseif(strpos($text,"/kick")===0 && isset($update["message"]["reply_to_message"])){
+            $kick_id=$update["message"]["reply_to_message"]["from"]["id"];
+            if($kick_id!=$from_id){
+                kickUser($chat_id,$kick_id);
+                sendMessage($chat_id,"User kicked by admin!");
+                sendMessage($admin_dm_id,"❌ User kicked: $kick_id by $from_name");
+            }
+        }
+    }
+
+    // ===== SPAM CONTROL =====
+    if($dont_spam && ($user_status=='member')){
+        deleteMessage($chat_id,$message_id);
+        if($admin_dm_id) sendMessage($admin_dm_id,"🗑️ Deleted message from $from_name: ".$update["message"]["text"]??'');
+    }
+
+    // ===== FUN & GPT COMMANDS =====
+    if($text=="/fun"){$reply=askGPT("Tell me a funny joke");sendMessage($chat_id,$reply);}
+    elseif(strpos($text,"/ask")===0){$question=trim(substr($text,4));$reply=askGPT($question);sendMessage($chat_id,$reply);}
+
+    // ===== AUTO-REPLIES & INLINE BUTTONS =====
+    if($text=="/start"){
+        $keyboard=['inline_keyboard'=>[
+            [['text'=>'Say Hi 👋','callback_data'=>'hi']],
+            [['text'=>'Help ❓','callback_data'=>'help']],
+            [['text'=>'Info ℹ️','callback_data'=>'info']],
+            [['text'=>'Fun 🎉','callback_data'=>'fun']]
+        ]];
+        sendMessage($chat_id,"👋 Hello $from_name! Welcome to $botName Bot.",$keyboard);
+    } elseif($text=="hi"||$text=="hello") sendMessage($chat_id,"Hello $from_name! How are you?");
+    elseif($text=="help") sendMessage($chat_id,"Admin-only commands:\n/dont_spam on\n/dont_spam off\n/kick (reply)\nOther fun: /start /fun /ask [question] /info");
+    elseif($text=="info") sendMessage($chat_id,"$botName Bot auto-replies, moderates the group & provides AI fun!");
+}
+
+// ===== CALLBACK BUTTONS =====
+if(isset($update["callback_query"])){
+    $chat_id=$update["callback_query"]["message"]["chat"]["id"];
+    $callback_id=$update["callback_query"]["id"];
+    $data=$update["callback_query"]["data"];
+    $from=$update["callback_query"]["from"]["first_name"]??'';
+
+    if($data=="hi") sendMessage($chat_id,"Hello $from! 👋");
+    elseif($data=="help") sendMessage($chat_id,"Type commands to interact. Admin commands only!");
+    elseif($data=="info") sendMessage($chat_id,"$botName Bot responds automatically, moderates & fun GPT commands!");
+    elseif($data=="fun") sendMessage($chat_id,"🎉 Rocky Bhai keeps the group fun! 😎");
+
+    answerCallback($callback_id);
+}
+?>
