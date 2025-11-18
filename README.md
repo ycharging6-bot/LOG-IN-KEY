@@ -1,1 +1,1 @@
-# LOG-IN-KEY
+https://aryanispe.myvippanel.shop/webhook.php?file=bots%2Fbot_691bf542cb508%2Fbot.php&token=YOUR_BOT_TOKEN LOG-IN-KEY
