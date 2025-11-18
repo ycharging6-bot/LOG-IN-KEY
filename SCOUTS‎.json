@@ -1,27 +1,6 @@
 [
-    {
-        "device_id": "0d81adc852f2045e",
-        "key": "rashid656",
-        "expirydate": "31-12-2026",
-        "Allowoffline": true
-    },
-    {
-        "device_id": "0fd94d36bdf741e3",
-        "key": "krishna54",
-        "expirydate": "19-11-2025",
-        "Allowoffline": false
-    },
-    {
-        "device_id": "31a3a2c74f901064",
-        "key": "h4ck1gy",
-        "expirydate": "19-11-2026",
-        "Allowoffline": false
-    },
-    {
-        "device_id": "153cd9a44042a3c4",
-        "key": "nunubhai66",
-        "expirydate": "19-11-2026",
-        "Allowoffline": false
-    }
-]
-
+            [
+                [
+                    "text" => "📌 Link 1",
+                    "url"  => "https://t.me/+mXlXUWn5jcg4YjI9"
+                ]
